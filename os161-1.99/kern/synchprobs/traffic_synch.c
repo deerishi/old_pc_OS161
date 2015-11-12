@@ -20,8 +20,22 @@
 
 /*
  * replace this with declarations of any synchronization and other variables you need here
+
  */
+ 
+ //Now only allow 2 cars
+ int inservice,wait_total;
+ Direction va_origin,va_destination; 
+ static struct lock *mutex; 
+ int waiting[4]; //list of waiting vehicles
+ static struct cv *CV[4];
 static struct semaphore *intersectionSem;
+statc bool is_correct_destination;
+
+bool isTurningRight(Direction origin, Direction destination)
+{
+	if(()va_destination!=destination) && (va\\))
+}
 
 
 /* 
@@ -35,10 +49,26 @@ void
 intersection_sync_init(void)
 {
   /* replace this default implementation with your own implementation */
-
+	
+	inservice=0;
+	wait_total=0;
   intersectionSem = sem_create("intersectionSem",1);
   if (intersectionSem == NULL) {
     panic("could not create intersection semaphore");
+  }
+  mutex=lock_create("intersection lock");
+  if(mutex==NULL)
+  {
+  	panic("could not create intersection lock");
+  }
+  int i;
+  for(i=0;i<4;i++)
+  {
+  	CV[i]=cv_create("condition varaible");
+  	if(CV[i]==NULL)
+  	{
+  		panic("could not create condition variable");
+  	}
   }
   return;
 }
@@ -56,6 +86,15 @@ intersection_sync_cleanup(void)
   /* replace this default implementation with your own implementation */
   KASSERT(intersectionSem != NULL);
   sem_destroy(intersectionSem);
+   KASSERT(mutex != NULL);
+  lock_destroy(mutex);
+  int i;
+  for(i=0;i<4;i++)
+  {
+  	 KASSERT(CV[i] != NULL);
+  	 cv_destroy(CV[i]);
+  }
+  
 }
 
 
@@ -76,10 +115,11 @@ void
 intersection_before_entry(Direction origin, Direction destination) 
 {
   /* replace this default implementation with your own implementation */
-  (void)origin;  /* avoid compiler complaint about unused parameter */
-  (void)destination; /* avoid compiler complaint about unused parameter */
-  KASSERT(intersectionSem != NULL);
-  P(intersectionSem);
+ // (void)origin;  /* avoid compiler complaint about unused parameter */
+  //(void)destination; /* avoid compiler complaint about unused parameter */
+  //KASSERT(intersectionSem != NULL);
+  //P(intersectionSem);
+  
 }
 
 

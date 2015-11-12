@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
+Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,7 +79,7 @@ struct lock {
         //volatile int  recurrent_count; //To support reentrancy
         struct wchan *mutex_wchan;
 		struct spinlock mutex_spinLock; 
-		struct thread * holding_thread;
+		volatile  struct thread * holding_thread; //it is set to a global variable. It has to be volatile
 		
 };
 
