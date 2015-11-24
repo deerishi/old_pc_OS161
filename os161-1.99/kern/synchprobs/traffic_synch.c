@@ -30,13 +30,50 @@
  int waiting[4]; //list of waiting vehicles
  static struct cv *CV[4];
 static struct semaphore *intersectionSem;
-statc bool is_correct_destination;
+static bool is_correct_destination;
+static Direction next_direction;
+
+bool isTurningRight(Direction origin, Direction destination);
+
+/*bool isTurningRight(Direction origin, Direction destination)
+{
+	if((va_destination!=destination) && ((va_destination==va_origin+1) || (destination==origin+1)))
+	{
+		if((va_origin<3 && va_destination==va_origin+1)|| (origin<3 && destination==origin+1) || (origin==3 && destination==0)|| (va_origin==3 && va_destination==0))
+		return true;
+		
+	}
+	
+		return false;
+	
+}*/
 
 bool isTurningRight(Direction origin, Direction destination)
 {
-	if(()va_destination!=destination) && (va\\))
+	if((va_destination!=destination) && ((va_destination==va_origin-1) || (destination==origin-1) || (origin==0 && destination==3) ||(va_origin==0 && va_destination==3)))
+	{
+		//if((va_origin<3 && va_destination==va_origin+1)|| (origin<3 && destination==origin+1) || (origin==3 && destination==0)|| (va_origin==3 && va_destination==0))
+		return true;
+		
+	}
+	
+		return false;
+	
 }
 
+
+
+bool are_constraints_satisfied(Direction origin,Direction destination);
+bool are_constraints_satisfied(Direction origin,Direction destination)
+{
+	if(va_origin==origin || (va_destination==origin && va_origin==destination) || isTurningRight(origin,destination))
+	{
+		return true;
+	}
+	
+		return false;
+	
+}
 
 /* 
  * The simulation driver will call this function once before starting
@@ -119,6 +156,37 @@ intersection_before_entry(Direction origin, Direction destination)
   //(void)destination; /* avoid compiler complaint about unused parameter */
   //KASSERT(intersectionSem != NULL);
   //P(intersectionSem);
+  lock_acquire(mutex);
+  if(inservice==0) //ie no car has entered
+  {
+  	KASSERT(wait_total==0);
+  	inservice++;
+  	is_correct_destination=true;		
+  	va_origin=origin;
+  	va_destination=destination;
+  	next_direction=origin+1;
+  	if(next_direction>3)
+  	{
+  		next_direction=0;
+  	}
+  	
+  }
+  else if(inservice==1) //means we have one car in the intersection
+  {
+    kprintf("origin is %d, des is %d\n",origin,destination);
+  	if(is_correct_destination && are_constraints_satisfied(origin,destination))
+  	{
+  		inservice++;
+  	}
+  }
+  else
+  {
+  	waiting[origin]++;
+  	wait_total++;
+  	cv_wait(CV[origin],mutex);
+  }
+  
+  lock_release(mutex);
   
 }
 
@@ -140,6 +208,26 @@ intersection_after_exit(Direction origin, Direction destination)
   /* replace this default implementation with your own implementation */
   (void)origin;  /* avoid compiler complaint about unused parameter */
   (void)destination; /* avoid compiler complaint about unused parameter */
-  KASSERT(intersectionSem != NULL);
-  V(intersectionSem);
+  /*KASSERT(intersectionSem != NULL);
+  V(intersectionSem);*/
+  lock_acquire(mutex);
+  inservice--;
+  is_correct_destination=false;
+  if(inservice==0 && wait_total>0)
+  {
+  	while( wait_total>0)
+  	{
+  		if(waiting[next_direction]==0)
+  		{
+  			next_direction=next_direction+1;	
+  		}
+  		if(next_direction >3 )
+  		{
+  			next_direction=0;
+  		}
+  	}
+  	cv_broadcast(CV[next_direction],mutex);
+  	wait_total=wait_total-waiting[next_direction];
+  }
+  lock_release(mutex);
 }
