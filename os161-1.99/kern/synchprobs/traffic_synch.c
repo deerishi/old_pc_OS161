@@ -66,7 +66,7 @@ bool isTurningRight(Direction origin, Direction destination)
 bool are_constraints_satisfied(Direction origin,Direction destination);
 bool are_constraints_satisfied(Direction origin,Direction destination)
 {
-	if(va_origin==origin || (va_destination==origin && va_origin==destination) || isTurningRight(origin,destination))
+	if((isTurningRight(origin,destination) && va_destination!=destination ) || (va_destination==origin && va_origin==destination) || va_origin==origin )
 	{
 		return true;
 	}
@@ -143,7 +143,7 @@ intersection_sync_cleanup(void)
  *
  * parameters:
  *    * origin: the Direction from which the vehicle is arriving
- *    * destination: the Direction in which the vehicle is trying to go
+ *     * destination: the Direction in which the vehicle is trying to go
  *
  * return value: none
  */
@@ -156,7 +156,9 @@ intersection_before_entry(Direction origin, Direction destination)
   //(void)destination; /* avoid compiler complaint about unused parameter */
   //KASSERT(intersectionSem != NULL);
   //P(intersectionSem);
+   
   lock_acquire(mutex);
+  kprintf("\norigin, des is %d-> %d and inservice is %d inside origin,des is %d-> %d and wait_total=%d \n",origin,destination,inservice,va_origin,va_destination,wait_total);
   if(inservice==0) //ie no car has entered
   {
   	KASSERT(wait_total==0);
@@ -169,18 +171,21 @@ intersection_before_entry(Direction origin, Direction destination)
   	{
   		next_direction=0;
   	}
+  	kprintf("add this origin\n");
   	
   }
   else if(inservice==1) //means we have one car in the intersection
   {
-    kprintf("origin is %d, des is %d\n",origin,destination);
+   
   	if(is_correct_destination && are_constraints_satisfied(origin,destination))
   	{
+  	    kprintf("inservice=1 add this origin\n");
   		inservice++;
   	}
   }
   else
   {
+    kprintf("waiting this origin\n");
   	waiting[origin]++;
   	wait_total++;
   	cv_wait(CV[origin],mutex);
@@ -211,6 +216,7 @@ intersection_after_exit(Direction origin, Direction destination)
   /*KASSERT(intersectionSem != NULL);
   V(intersectionSem);*/
   lock_acquire(mutex);
+  kprintf("\nexiting origin, des is %d-> %d and inservice is %d inside origin,des is %d-> %d\n",origin,destination,inservice,va_origin,va_destination);
   inservice--;
   is_correct_destination=false;
   if(inservice==0 && wait_total>0)
@@ -221,13 +227,19 @@ intersection_after_exit(Direction origin, Direction destination)
   		{
   			next_direction=next_direction+1;	
   		}
-  		if(next_direction >3 )
+  		if(next_direction >3)
   		{
   			next_direction=0;
   		}
-  	}
-  	cv_broadcast(CV[next_direction],mutex);
-  	wait_total=wait_total-waiting[next_direction];
+  	
+  	if(waiting[next_direction]!=0)
+  	{
+  	    kprintf("\nwaking %d \n",next_direction);
+      	cv_broadcast(CV[next_direction],mutex);
+      	wait_total=wait_total-waiting[next_direction];
+    }
+  }
+    
   }
   lock_release(mutex);
 }
