@@ -216,7 +216,7 @@ intersection_after_exit(Direction origin, Direction destination)
   /*KASSERT(intersectionSem != NULL);
   V(intersectionSem);*/
   lock_acquire(mutex);
-  kprintf("\nexiting origin, des is %d-> %d and inservice is %d inside origin,des is %d-> %d\n",origin,destination,inservice,va_origin,va_destination);
+  kprintf("\nexiting origin, des is %d-> %d and inservice is %d inside origin,des is %d-> %d and wait_total is %d\n",origin,destination,inservice,va_origin,va_destination,wait_total);
   inservice--;
   is_correct_destination=false;
   if(inservice==0 && wait_total>0)

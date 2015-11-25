@@ -408,6 +408,7 @@ vehicle_simulation(void * unusedpointer,
        enter the intersection */
     /* we also measure the time spent blocked */
     gettime(&before_sec,&before_nsec);
+    kprintf("callinf before with %d->%d\n",v.origin,v.destination);
     intersection_before_entry(v.origin, v.destination);
     gettime(&after_sec,&after_nsec);
 
