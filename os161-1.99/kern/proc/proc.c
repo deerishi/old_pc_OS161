@@ -50,6 +50,7 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include <kern/wait.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -69,6 +70,39 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+#if OPT_A2
+static struct proc *processList[256]; //no need to declare static. the whole pooint if declaring static is to lkimit the scope
+// of the variable to that file itself i mean the .c file npt the .h file, never declare a golabl/static 
+//variable in a header file. always declare it in the .c file, if you wanna use that variable in 
+//mulitple .c file its best to declare the variable as extern in the .h file.
+
+struct lock *lockForTable;
+#endif
+
+#ifdef OPT_A2
+//clean up exited PID's'
+void decoupleParents(pid_t pid)
+{
+    //struct proc *process=getProcessFromPid(pid);
+    int i;
+    for(i=0;i<6;i++)
+    {
+        if(processList[i]!=NULL && processList[i]->parent!=NULL && processList[i]->parent->pid==pid)
+        {
+            kprintf("i is %d and exite is %d\n",i,processList[i]->exited);
+            if(processList[i]->exited!=__WEXITED)
+            {
+                processList[i]->parent=NULL; //Remove the parent child relationship form the child 
+            }
+            else
+            {
+                proc_destroy(processList[i]);
+                //implement pid resuse mechanism in proc_destroy
+            }
+        }
+    }
+}
+#endif
 
 
 /*
@@ -78,8 +112,28 @@ static
 struct proc *
 proc_create(const char *name)
 {
-	struct proc *proc;
+//processList[0]=processList[0];
 
+#if OPT_A2
+     int i;
+     //lock_acquire(lockForTable);
+    for(i=2;i<=256;i++)
+    {
+        if(processList[i]==NULL)
+        {
+
+            break;
+        }
+    }
+
+    if(i>256)
+    {
+        panic("proc_create failed\n");
+    }
+#endif
+    
+	struct proc *proc;
+    
 	proc = kmalloc(sizeof(*proc));
 	if (proc == NULL) {
 		return NULL;
@@ -89,7 +143,9 @@ proc_create(const char *name)
 		kfree(proc);
 		return NULL;
 	}
-
+#ifdef OPT_A2
+    proc->pid=i;
+#endif
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
 
@@ -98,11 +154,23 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
+#if OPT_A2
+    proc->waitcv=cv_create("waitcv");
+    if(proc->waitcv==NULL)
+    {
+        panic("Could not create WaitCV");
+    }
+    proc->exited=-1;// making the exit status other than __WEXITED
+    //proc->parent=curproc;
+    processList[i]=proc;
+#endif
 
 #ifdef UW
 	proc->console = NULL;
 #endif // UW
-
+    
+    
+    //lock_release(lockForTable);
 	return proc;
 }
 
@@ -136,7 +204,10 @@ proc_destroy(struct proc *proc)
 		proc->p_cwd = NULL;
 	}
 
-
+#ifdef OPT_A2
+    processList[proc->pid]=NULL;
+    kfree(proc->waitcv); //since wautcv was allocated by kmalloc , we should free it 
+#endif
 #ifndef UW  // in the UW version, space destruction occurs in sys_exit, not here
 	if (proc->p_addrspace) {
 		/*
@@ -193,6 +264,19 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+ #if OPT_A2
+    int i;
+    kprintf("bootstarp i sdone\n");
+    for(i=0;i<256;i++)
+    {
+        processList[i]=NULL;
+    }
+    lockForTable=lock_create("lockForTable");
+    if (lockForTable == NULL) {
+    panic("could not create lockForTable\n");
+  }
+#endif
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
@@ -208,6 +292,10 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW 
+
+#if OPT_A2
+    kproc->parent=NULL;
+#endif
 }
 
 /*
@@ -226,6 +314,10 @@ proc_create_runprogram(const char *name)
 	if (proc == NULL) {
 		return NULL;
 	}
+#ifdef OPT_A2
+    kprintf("lolo\n");
+   proc->parent=curproc;
+#endif
 
 #ifdef UW
 	/* open the console - this should always succeed */
@@ -363,4 +455,9 @@ curproc_setas(struct addrspace *newas)
 	proc->p_addrspace = newas;
 	spinlock_release(&proc->p_lock);
 	return oldas;
+}
+
+struct proc *getProcessFromPid(pid_t pid)
+{
+    return processList[pid];
 }

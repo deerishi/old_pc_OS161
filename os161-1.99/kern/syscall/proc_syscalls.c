@@ -9,6 +9,11 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include <synch.h>
+#include <mips/trapframe.h>
+#include <limits.h>
+#include <spl.h>
+#include "opt-A2.h"
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -19,9 +24,33 @@ void sys__exit(int exitcode) {
   struct proc *p = curproc;
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
-  (void)exitcode;
-
-  DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
+    lock_acquire(lockForTable);
+    
+    (void)exitcode;
+    p->exitCode=exitcode;
+    p->exited=__WEXITED;
+    decoupleParents(p->pid); //decouple this process from its children
+    if(p->parent==NULL) //MEANS THAT THE PARENT OF THE PROCESS HAS ALREADY EXITED THEN WE CAN SIMPLY DESTROY THE PROCESS
+    {
+        KASSERT(curproc->p_addrspace != NULL);
+        as_deactivate();
+        as = curproc_setas(NULL);
+        as_destroy(as);
+        lock_release(lockForTable);
+        proc_destroy(p);
+        
+        thread_exit();
+        panic("return from thread_exit in sys_exit\n");
+    }
+   // else
+  //  {
+    //    decoupleParents(p->pid);
+   // }
+    DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
+    
+    cv_signal(p->waitcv,lockForTable);
+    lock_release(lockForTable);
+  
 
   KASSERT(curproc->p_addrspace != NULL);
   as_deactivate();
@@ -37,11 +66,11 @@ void sys__exit(int exitcode) {
 
   /* detach this thread from its process */
   /* note: curproc cannot be used after this call */
-  proc_remthread(curthread);
+  //proc_remthread(curthread);
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
-  proc_destroy(p);
+  //proc_destroy(p); dont destroy the process here, we might need it later
   
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
@@ -55,7 +84,8 @@ sys_getpid(pid_t *retval)
 {
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
-  *retval = 1;
+  *retval = curthread->t_proc->pid;
+  kprintf("returning %d",*retval);
   return(0);
 }
 
@@ -69,7 +99,15 @@ sys_waitpid(pid_t pid,
 {
   int exitstatus;
   int result;
-
+  lock_acquire(lockForTable);
+    struct proc *process=getProcessFromPid(pid); //get the process structure for the parent
+    if(process->parent!=curproc) //meaning that the parent is not calling the 
+    {
+        //status=-1;
+        lock_release(lockForTable);
+        return EAGAIN;
+        
+    }
   /* this is just a stub implementation that always reports an
      exit status of 0, regardless of the actual exit status of
      the specified process.   
@@ -78,17 +116,99 @@ sys_waitpid(pid_t pid,
 
      Fix this!
   */
-
+    if(process==NULL) //that is the child process is NULL, meaning that its alraeady destroyed
+    {
+        lock_release(lockForTable);
+        return ESRCH;
+    }
+    if(process->exited!=__WEXITED) //means that the child rpocess has not  exited 
+    {
+        while(process->exited!=__WEXITED)
+        {
+            cv_wait(process->waitcv,lockForTable);
+        }
+        //return process->pid;
+    }
   if (options != 0) {
+  lock_release(lockForTable);
     return(EINVAL);
   }
   /* for now, just pretend the exitstatus is 0 */
-  exitstatus = 0;
+  exitstatus = process->exitCode;
   result = copyout((void *)&exitstatus,status,sizeof(int));
   if (result) {
+          lock_release(lockForTable);
     return(result);
   }
   *retval = pid;
+          lock_release(lockForTable);
   return(0);
+}
+
+int sys_fork(struct trapframe *tf,int32_t *retval)
+{
+    
+     char *childName= kmalloc(sizeof(char) * NAME_MAX);
+    strcpy(childName, curproc->p_name); 
+    strcat(childName, "_forked");
+    kprintf("in fork\n");
+    struct proc *childProcess=proc_create_runprogram(childName)   ; //Creates the process for the child
+     kprintf(" 2 in fork\n");
+    if(childProcess==NULL)
+    {
+        panic("Could Not Create child process\n");
+    }
+    struct trapframe *copy=kmalloc(sizeof(struct trapframe));
+    kprintf(" 3 in fork\n");
+    memcpy(copy,tf,sizeof(struct trapframe));
+    //kprintf(" 4 in fork\n");
+
+    kprintf("curproc pid is %d\n",curproc->pid);
+     struct addrspace *addr2=kmalloc(sizeof(struct addrspace));
+    if(addr2==NULL)
+    {
+        kfree(childName);
+        kfree(copy);
+        proc_destroy(childProcess);
+        return ENOMEM;
+        
+    }
+    
+    int flag=as_copy(curproc->p_addrspace,&addr2);
+    
+    kprintf(" 3.3 in fork\n");
+    if(flag==ENOMEM)
+    {
+        //Means out of memory 
+        kfree(childName);
+        kfree(copy);
+        proc_destroy(childProcess);
+        return ENOMEM;
+    }
+    childProcess->p_addrspace=addr2;
+    //int spl=splhigh();
+   	struct addrspace *old= curproc_setas(childProcess->p_addrspace);
+    old=old;
+    //as_activate();
+    //struct thread **ret;
+    kprintf("jijij\n");
+    int res=thread_fork(childName,childProcess,(void *) enter_forked_process, copy,(unsigned long)childProcess->p_addrspace);
+    if (res) {
+        kfree(childName);
+        kfree(copy);
+        as_destroy(addr2);
+        proc_destroy(childProcess);
+        return ENOMEM;
+    }
+    //loading the success parameters
+    //tf->tf_v0=childProcess->pid;
+    //tf->tf_a3=0;
+    //splx(spl);
+    *retval=childProcess->pid;
+    //retpid=childProcess->pid;
+    kprintf("returning %d\n",childProcess->pid);
+    return 0;
+
+    
 }
 
