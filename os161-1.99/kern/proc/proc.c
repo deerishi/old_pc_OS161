@@ -85,20 +85,27 @@ void decoupleParents(pid_t pid)
 {
     //struct proc *process=getProcessFromPid(pid);
     int i;
-    for(i=0;i<6;i++)
+    
+    for(i=0;i<256;i++)
     {
         if(processList[i]!=NULL && processList[i]->parent!=NULL && processList[i]->parent->pid==pid)
         {
-            kprintf("i is %d and exite is %d\n",i,processList[i]->exited);
+            //kprintf("i is %d and exite is %d\n",i,processList[i]->exited);
+            spinlock_acquire(&processList[i]->p_lock);
             if(processList[i]->exited!=__WEXITED)
             {
                 processList[i]->parent=NULL; //Remove the parent child relationship form the child 
             }
             else
             {
+                spinlock_release(&processList[i]->p_lock);
                 proc_destroy(processList[i]);
+                continue;
                 //implement pid resuse mechanism in proc_destroy
             }
+            spinlock_release(&processList[i]->p_lock);
+            
+            
         }
     }
 }
@@ -171,6 +178,7 @@ proc_create(const char *name)
     
     
     //lock_release(lockForTable);
+    //DEBUG(DB_SYSCALL,"Process created is %d at 0x%x\n",proc->pid,(size_t)proc);
 	return proc;
 }
 
@@ -188,6 +196,7 @@ proc_destroy(struct proc *proc)
          * be defined because the calling thread may have already detached itself
          * from the process.
 	 */
+	 //DEBUG(DB_SYSCALL,"process pid being destroyed is %d at 0x%x\n",proc->pid,(size_t)proc);
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
@@ -315,8 +324,8 @@ proc_create_runprogram(const char *name)
 		return NULL;
 	}
 #ifdef OPT_A2
-    kprintf("lolo\n");
-   proc->parent=curproc;
+    //kprintf("lolo\n");
+    proc->parent=curproc;
 #endif
 
 #ifdef UW
@@ -335,7 +344,7 @@ proc_create_runprogram(const char *name)
 
 	proc->p_addrspace = NULL;
 
-	/* VFS fields */
+	/* VFlS fields */
 
 #ifdef UW
 	/* we do not need to acquire the p_lock here, the running thread should

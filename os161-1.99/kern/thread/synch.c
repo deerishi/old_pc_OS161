@@ -185,7 +185,7 @@ void
 lock_destroy(struct lock *lock)
 {
         KASSERT(lock != NULL);
-        KASSERT(curthread->t_in_interrupt == false);
+        //KASSERT(curthread->t_in_interrupt == false);
 		//KASSERT(lock->holding_thread==curthread);  //Any thread can destroy the lock. only the holding thread can release the lock
         // add stuff here as needed
         

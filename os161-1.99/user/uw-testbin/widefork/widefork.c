@@ -26,6 +26,7 @@ int
 dofork(int childnum) 
 {
   pid_t pid;
+  //printf("calling fork\n");
   pid = fork();
   if (pid < 0) {
     errx(1,"fork %d",childnum);
@@ -36,6 +37,7 @@ dofork(int childnum)
     putchar('\n');
     _exit(childnum);
   }
+  //printf("returning pid %d\n",pid);
   return(pid);
 }
 
@@ -43,12 +45,14 @@ void
 dowait(int childpid, int childnum)
 {
   int rval;
+  //printf("calling do wait with pid %d and ch %d\n",childpid,childnum);
   if (waitpid(childpid,&rval,0) < 0) {
     warnx("waitpid 1");
     return;
   }
   if (WIFEXITED(rval)) {
     if ((WEXITSTATUS(rval)) == childnum) {
+      //printf("printing do wait\n");
       putchar('a'+childnum-1);
       putchar('\n');
     }

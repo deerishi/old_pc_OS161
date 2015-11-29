@@ -484,7 +484,7 @@ thread_fork(const char *name,
 	int result;
 
 #ifdef UW
-	DEBUG(DB_THREADS,"Forking thread: %s\n",name);
+	//DEBUG(DB_THREADS,"Forking thread: %s\n",name);
 #endif // UW
 
 	newthread = thread_create(name);
