@@ -9,6 +9,8 @@
 
 #include <unistd.h>
 #include <err.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 static char *xhargv[2] = { (char *)"xhog", NULL };
 static char *yhargv[2] = { (char *)"yhog", NULL };

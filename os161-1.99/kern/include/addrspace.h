@@ -99,8 +99,7 @@ void              as_activate(void);
 void              as_deactivate(void);
 void              as_destroy(struct addrspace *);
 
-int               as_define_region(struct addrspace *as, 
-                                   vaddr_t vaddr, size_t sz,
+int               as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
                                    int readable, 
                                    int writeable,
                                    int executable);

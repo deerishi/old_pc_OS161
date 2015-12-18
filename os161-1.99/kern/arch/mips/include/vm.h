@@ -108,7 +108,8 @@ void ram_getsize(paddr_t *lo, paddr_t *hi);
  * We'll take up to 16 invalidations before just flushing the whole TLB.
  */
 
-struct tlbshootdown {
+struct tlbshootdown 
+{
 	/*
 	 * Change this to what you need for your VM design.
 	 */

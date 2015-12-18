@@ -12,7 +12,11 @@
 #include <synch.h>
 #include <mips/trapframe.h>
 #include <limits.h>
+#include <kern/errno.h>
+#include <kern/fcntl.h>
 #include <spl.h>
+#include <vm.h>
+#include <vfs.h>
 #include "opt-A2.h"
 
   /* this implementation of sys__exit does not do anything with the exit code */
@@ -195,7 +199,8 @@ int sys_fork(struct trapframe *tf,int32_t *retval)
     //struct thread **ret;
     //kprintf("jijij\n");
     int res=thread_fork(childName,childProcess,(void *) enter_forked_process, copy,(unsigned long)childProcess->p_addrspace);
-    if (res) {
+    if (res) 
+    {
         kfree(childName);
         kfree(copy);
         as_destroy(addr2);
@@ -210,7 +215,108 @@ int sys_fork(struct trapframe *tf,int32_t *retval)
     //retpid=childProcess->pid;
     //kprintf("returning %d\n",childProcess->pid);
     return 0;
-
-    
 }
 
+int sys_execv(userptr_t progname, userptr_t args)
+{
+    args=args;
+    struct addrspace *as;
+	struct vnode *v;
+	char *Progname=(char *)progname;
+	vaddr_t entrypoint, stackptr;
+	int result;
+    char *Kbuf[14];
+    char **kargs=(char **)args;
+    //char **kbuf;
+    int i=0,length,space=0,res;
+    //copying all the arguments in to the kernel buffer
+    char *str=kmalloc(sizeof(char)*256);
+    int arrlength=0;
+    while(kargs[i]!=NULL)
+    {
+        length=strlen(kargs[i])+1;
+        arrlength++;
+        if(length%4 !=0 )
+        {
+            length+= 4 - (length%4);
+        }
+        space+=length;
+        /*kbuf[i]=kmalloc(length);
+        if(kbuf[i]==NULL)
+        {
+            return ENOMEM;
+        }*/
+        size_t strlength=strlen(kargs[i]);
+        Kbuf[i]=kmalloc(sizeof(char)*256);
+        res=copyinstr((userptr_t)kargs[i],str,(size_t)length,&strlength);
+        Kbuf[i]=str;
+        if(res)
+        {
+             return(res);
+        }   
+        i++; 
+    }
+    Kbuf[i]=NULL;
+    //
+	/* Open the file. */
+	result = vfs_open(Progname, O_RDONLY, 0, &v);
+	if (result) 
+	{
+		return result;
+	}
+
+	
+	/* Create a new address space. */
+	as = as_create();
+	if (as ==NULL) 
+	{
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	curproc_setas(as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) 
+	{
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(as, &stackptr);
+	DEBUG(DB_SYSCALL,"stack addresses are 0x%x and 0x%x\n",stackptr,USERSTACK);
+	if (result) 
+	{
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+	int j;
+	//stackptr=stackptr-i-(arrlength*sizeof);	
+    for(j=0;j<=i;j++)
+    {
+        //char *arg=Kbuf[i];
+
+        result = copyout((void *)&Kbuf[i],(userptr_t)stackptr,(sizeof(Kbuf)));
+                DEBUG(DB_SYSCALL,"kbuf addresses are 0x%x \n",stackptr);
+        stackptr=stackptr-4;
+    }
+    if (result) 
+	{
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+	/* Warp to user mode. */
+	enter_new_process(arrlength/*argc*/,(userptr_t) Kbuf /*userspace addr of argv*/,stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;    
+}

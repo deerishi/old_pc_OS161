@@ -120,6 +120,8 @@ struct addrspace *curproc_setas(struct addrspace *);
 
 #if OPT_A2
 struct proc *getProcessFromPid(pid_t pid);
+int execv(const char *program, char **args);
+
 #endif
 
 #endif /* _PROC_H_ */
